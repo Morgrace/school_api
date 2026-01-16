@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -36,6 +37,12 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("FULL PATH", r.URL.Path)
 	path := strings.TrimPrefix(r.URL.Path, "/teachers/")
 	idStr := strings.TrimSuffix(path, "/")
+	db, err := sqlconnect.ConnectDb()
+	if err != nil {
+		http.Error(w, "Error Connecting to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
 
 	if idStr == "" {
 
@@ -71,12 +78,18 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		return
 	}
-	teacher, exists := teachers[id]
-	if !exists {
+
+	var teacher models.Teacher
+	err = db.QueryRow("SELECT id, first_name, last_name, email, class, subject FROM teachers WHERE id = ?", id).Scan(&teacher.ID, &teacher.FirstName, &teacher.LastName, &teacher.Email, &teacher.Class, &teacher.Subject)
+
+	if err == sql.ErrNoRows {
 		http.Error(w, "Teacher not found", http.StatusNotFound)
 		return
+	} else if err != nil {
+		http.Error(w, "Database query error", http.StatusInternalServerError)
+		return
 	}
-
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teacher)
 }
 
@@ -95,6 +108,7 @@ func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid Request Body", http.StatusBadRequest)
 		return
 	}
+
 	stmt, err := db.Prepare("INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES(?,?,?,?,?)")
 	if err != nil {
 		http.Error(w, "Error in preparing SQL query", http.StatusInternalServerError)
