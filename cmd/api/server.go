@@ -30,13 +30,15 @@ func main() {
 	// 3. WIRING: Dependency Injection Chain
 	// Level 1: Create the Repository (injects DB)
 	teacherRepo := repository.NewTeacherRepository(db)
+	studentRepo := repository.NewStudentRepository(db)
 
 	// Level 2: Create the Handler (injects Repo)
 	teacherHandler := handlers.NewTeacherHandler(teacherRepo)
+	studentHandler := handlers.NewStudentHandler(studentRepo)
 
 	// Level 3: Create the Router (injects Handler)
 	// Note: We need to update your router.Router() function to accept this argument!
-	mux := router.Router(teacherHandler)
+	mux := router.Router(teacherHandler, studentHandler)
 
 	port := os.Getenv("SERVER_PORT")
 

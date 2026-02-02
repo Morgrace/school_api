@@ -7,26 +7,32 @@ import (
 	"simpleapi/internal/api/handlers"
 )
 
-// Router now accepts the fully initialized TeacherHandler
-func Router(h *handlers.TeacherHandler) *http.ServeMux {
+func Router(th *handlers.TeacherHandler, sh *handlers.StudentHandler) *http.ServeMux {
 
-	mux := http.NewServeMux()
+	// 1. Create the Sub-Router for V1
+	// This router thinks it is at the root ("/")
+	v1 := http.NewServeMux()
 
-	// If RootHandler is still a simple function (not in the struct),
-	// you can call it directly like this:
-	// mux.HandleFunc("/", handlers.RootHandler)
+	// --- TEACHER ROUTES ---
+	v1.HandleFunc("GET /teachers", th.GetTeachers)
+	v1.HandleFunc("POST /teachers", th.CreateTeachers)
+	v1.HandleFunc("PATCH /teachers", th.BulkPatchTeachers)
+	v1.HandleFunc("DELETE /teachers", th.BulkDeleteTeachers)
+	v1.HandleFunc("GET /teachers/{id}", th.GetTeacherByID)
+	v1.HandleFunc("PUT /teachers/{id}", th.UpdateTeacherFull)
+	v1.HandleFunc("PATCH /teachers/{id}", th.PatchTeacher)
+	v1.HandleFunc("DELETE /teachers/{id}", th.DeleteTeacher)
 
-	// --- COLLECTION ROUTES ---
-	mux.HandleFunc("GET /teachers", h.GetTeachers)
-	mux.HandleFunc("POST /teachers", h.CreateTeachers)       // renamed from AddTeacherHandler
-	mux.HandleFunc("PATCH /teachers", h.BulkPatchTeachers)   // renamed from PatchTeachersHandler
-	mux.HandleFunc("DELETE /teachers", h.BulkDeleteTeachers) // renamed from DeleteTeachersHandler
+	// --- SUB ROUTES ---
+	v1.HandleFunc("GET /teachers/{id}/students", th.GetStudentsByTeacherId)
+	v1.HandleFunc("GET /teachers/{id}/studentCount", th.GetStudentsByTeacherId)
 
-	// --- SINGLE ITEM ROUTES ---
-	mux.HandleFunc("GET /teachers/{id}", h.GetTeacherByID)    // renamed from GetTeacherHandler
-	mux.HandleFunc("PUT /teachers/{id}", h.UpdateTeacherFull) // renamed from UpdateTeacherHandler
-	mux.HandleFunc("PATCH /teachers/{id}", h.PatchTeacher)    // renamed from PatchTeacherHandler
-	mux.HandleFunc("DELETE /teachers/{id}", h.DeleteTeacher)  // renamed from DeleteOneTeacherHandler
+	// ---- STUDENT ROUTES ---
+	v1.HandleFunc("GET /students", sh.GetStudents)
+	v1.HandleFunc("POST /students", sh.CreateStudents)
 
-	return mux
+	mainMux := http.NewServeMux()
+
+	mainMux.Handle("/api/v1/", http.StripPrefix("/api/v1", v1))
+	return mainMux
 }

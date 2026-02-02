@@ -51,7 +51,7 @@ func (h *TeacherHandler) GetTeachers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// util automatically adds "status": "success"
-	utils.WriteJSON(w, http.StatusOK, response)
+	utils.WriteJSON(w, http.StatusOK, "Teachers fetched successfully", response)
 }
 
 func (h *TeacherHandler) GetTeacherByID(w http.ResponseWriter, r *http.Request) {
@@ -72,13 +72,25 @@ func (h *TeacherHandler) GetTeacherByID(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, teacher)
+	utils.WriteJSON(w, http.StatusOK, "Teacher fetched successfully", teacher)
 }
 
 func (h *TeacherHandler) CreateTeachers(w http.ResponseWriter, r *http.Request) {
 	var newTeachers []models.Teacher
-	if err := json.NewDecoder(r.Body).Decode(&newTeachers); err != nil {
-		utils.WriteError(w, http.StatusBadRequest, "Invalid request body ")
+
+	decoder := json.NewDecoder(r.Body)
+
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&newTeachers); err != nil {
+		utils.WriteError(w, http.StatusBadRequest, "Invalid request body: "+err.Error())
+		return
+	}
+
+	teacherValidationErrors := models.ValidateBatch(newTeachers)
+
+	if len(teacherValidationErrors) > 0 {
+		utils.WriteError(w, http.StatusBadRequest, "Validation failed", teacherValidationErrors)
 		return
 	}
 
@@ -97,10 +109,11 @@ func (h *TeacherHandler) CreateTeachers(w http.ResponseWriter, r *http.Request) 
 		Data:  added,
 	}
 
-	utils.WriteJSON(w, http.StatusCreated, response)
+	utils.WriteJSON(w, http.StatusCreated, "Teachers created successfully", response)
 }
 
 func (h *TeacherHandler) UpdateTeacherFull(w http.ResponseWriter, r *http.Request) {
+
 	idStr := r.PathValue("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -121,7 +134,7 @@ func (h *TeacherHandler) UpdateTeacherFull(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, result)
+	utils.WriteJSON(w, http.StatusOK, "Teacher updated successfully", result)
 }
 
 func (h *TeacherHandler) PatchTeacher(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +161,7 @@ func (h *TeacherHandler) PatchTeacher(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	utils.WriteJSON(w, http.StatusOK, result)
+	utils.WriteJSON(w, http.StatusOK, "Teacher updated successfully", result)
 }
 
 func (h *TeacherHandler) BulkPatchTeachers(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +183,7 @@ func (h *TeacherHandler) BulkPatchTeachers(w http.ResponseWriter, r *http.Reques
 		"updated_ids": updatedIds,
 	}
 
-	utils.WriteJSON(w, http.StatusOK, response)
+	utils.WriteJSON(w, http.StatusOK, "Teachers updated successfully", response)
 }
 
 func (h *TeacherHandler) DeleteTeacher(w http.ResponseWriter, r *http.Request) {
@@ -228,5 +241,53 @@ func (h *TeacherHandler) BulkDeleteTeachers(w http.ResponseWriter, r *http.Reque
 		DeletedIDs: validIds,
 	}
 
-	utils.WriteJSON(w, http.StatusOK, response)
+	utils.WriteJSON(w, http.StatusOK, "Teachers deleted successfully", response)
+}
+
+func (h *TeacherHandler) GetStudentsByTeacherId(w http.ResponseWriter, r *http.Request) {
+	teacherId := r.PathValue("id")
+
+	var students = make([]models.Student, 0)
+
+	query := `SELECT s.id, s.first_name, s.last_name, s.email, s.class 
+			  FROM teachers t 
+			  INNER JOIN students s ON t.class = s.class
+			  WHERE t.id = ?`
+
+	rows, err := h.Repo.DB.QueryContext(r.Context(), query, teacherId)
+	if err != nil {
+		log.Println(err)
+		utils.ResponseError(w, err, "")
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var student models.Student
+
+		err := rows.Scan(&student.ID, &student.FirstName, &student.LastName, &student.Email, &student.Class)
+		if err != nil {
+			log.Println(err)
+			utils.ResponseError(w, err, "")
+			return
+		}
+		students = append(students, student)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		log.Println(err)
+		utils.ResponseError(w, err, "")
+		return
+	}
+	response := struct {
+		Count int              `json:"count"`
+		Data  []models.Student `json:"data"`
+	}{
+		Count: len(students),
+		Data:  students,
+	}
+
+	utils.WriteJSON(w, 200, "Students fetched successfully", response)
+
 }

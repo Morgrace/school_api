@@ -7,6 +7,13 @@ import (
 	"simpleapi/internal/models"
 )
 
+type APIResponse struct {
+	Status     string `json:"status"`
+	StatusCode int    `json:"statusCode"`
+	Message    string `json:"message"`
+	Data       any    `json:"data"`
+}
+
 // func ErrorHandler(err error, message string) error {
 // 	errorLogger := log.New(os.Stderr, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
 // 	errorLogger.Println(message, err)
@@ -54,7 +61,7 @@ func ResponseError(w http.ResponseWriter, err error, message string) {
 }
 
 // WriteError sends the JSON response (The "Dumb" Formatter)
-func WriteError(w http.ResponseWriter, code int, message string) {
+func WriteError(w http.ResponseWriter, code int, message string, details ...any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 
@@ -63,24 +70,35 @@ func WriteError(w http.ResponseWriter, code int, message string) {
 		status = "fail"
 	}
 
+	var detailsVaue any
+	if len(details) > 0 {
+		detailsVaue = details[0]
+	}
+
 	json.NewEncoder(w).Encode(struct {
-		Status  string `json:"status"`
-		Message string `json:"message"`
+		Status     string `json:"status"`
+		StatusCode int    `json:"statusCode"`
+		Message    string `json:"message"`
+		Details    any    `json:"details,omitempty"`
 	}{
-		Status:  status,
-		Message: message,
+		Status:     status,
+		StatusCode: code,
+		Message:    message,
+		Details:    detailsVaue,
 	})
 }
 
 // WriteJSON sends success response
-func WriteJSON(w http.ResponseWriter, code int, data any) {
+func WriteJSON(w http.ResponseWriter, code int, message string, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(struct {
-		Status string `json:"status"`
-		Data   any    `json:"data"`
-	}{
-		Status: "success",
-		Data:   data,
-	})
+
+	response := APIResponse{
+		Status:     "success",
+		StatusCode: code,
+		Message:    message,
+		Data:       data,
+	}
+
+	json.NewEncoder(w).Encode(response)
 }

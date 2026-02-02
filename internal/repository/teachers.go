@@ -112,17 +112,17 @@ func (r *TeacherRepository) UpdateFull(ctx context.Context, id int, update model
 	if err != nil {
 		return nil, fmt.Errorf("repo: failed to update teacher: %w", err)
 	}
-	
+
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return nil, fmt.Errorf("repo: failed to get rows affected: %w", err)
 	}
-	
+
 	// Translation: 0 rows affected -> Domain "Not Found"
 	if rows == 0 {
 		return nil, fmt.Errorf("repo: teacher %d not found: %w", id, models.ErrNotFound)
 	}
-	
+
 	update.ID = id
 	return &update, nil
 }
@@ -133,14 +133,16 @@ func (r *TeacherRepository) Patch(ctx context.Context, id int, updates map[strin
 	if err != nil {
 		return nil, err
 	}
-	
+
 	query := "UPDATE teachers SET "
 	var args []interface{}
 	var columns []string
 	allowedCols := map[string]bool{"first_name": true, "last_name": true, "email": true, "class": true, "subject": true}
 
 	for k, v := range updates {
-		if !allowedCols[k] { continue }
+		if !allowedCols[k] {
+			continue
+		}
 
 		strVal, ok := v.(string)
 		if !ok {
@@ -152,11 +154,16 @@ func (r *TeacherRepository) Patch(ctx context.Context, id int, updates map[strin
 
 		// Update in-memory struct
 		switch k {
-		case "first_name": current.FirstName = strVal
-		case "last_name":  current.LastName = strVal
-		case "email":      current.Email = strVal
-		case "class":      current.Class = strVal
-		case "subject":    current.Subject = strVal
+		case "first_name":
+			current.FirstName = strVal
+		case "last_name":
+			current.LastName = strVal
+		case "email":
+			current.Email = strVal
+		case "class":
+			current.Class = strVal
+		case "subject":
+			current.Subject = strVal
 		}
 	}
 
@@ -209,8 +216,10 @@ func (r *TeacherRepository) updateTeacherTx(ctx context.Context, tx *sql.Tx, id 
 	allowedCols := map[string]bool{"first_name": true, "last_name": true, "email": true, "class": true, "subject": true}
 
 	for k, v := range updates {
-		if k == "id" || !allowedCols[k] { continue }
-		
+		if k == "id" || !allowedCols[k] {
+			continue
+		}
+
 		strVal, ok := v.(string)
 		if !ok {
 			return 0, fmt.Errorf("field %s expected string", k)
@@ -244,7 +253,7 @@ func (r *TeacherRepository) Delete(ctx context.Context, id int) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("repo: failed to check rows: %w", err)
 	}
-	
+
 	// We return 'false' if 0 rows deleted, Handler converts this to 404
 	return rows > 0, nil
 }
@@ -308,8 +317,9 @@ func (r *TeacherRepository) BulkDelete(ctx context.Context, ids []int) ([]int, e
 	return validIds, nil
 }
 
-// --- HELPERS ---
+// func (r *TeacherRepository)
 
+// --- HELPERS ---
 func (r *TeacherRepository) addSorts(filter models.TeacherFilter, query string) string {
 	validSorts := map[string]bool{"first_name": true, "last_name": true, "email": true, "class": true, "subject": true}
 	if validSorts[filter.SortBy] {
