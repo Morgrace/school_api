@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"simpleapi/internal/repository"
 	"simpleapi/pkg/utils"
 	"strconv"
+	"time"
 )
 
 // TeacherHandler holds the dependencies for these HTTP endpoints
@@ -22,6 +24,164 @@ func NewTeacherHandler(repo *repository.TeacherRepository) *TeacherHandler {
 }
 
 // --- HANDLERS ---
+
+// AUTH
+func (h *TeacherHandler) RegisterTeacher(w http.ResponseWriter, r *http.Request) {
+	var newTeacher models.Teacher
+
+	if err := json.NewDecoder(r.Body).Decode(&newTeacher); err != nil {
+		utils.WriteError(w, 400, "Invalid request body")
+		log.Println(err)
+		return
+	}
+	defer r.Body.Close()
+
+	if errors := models.ValidateOne(newTeacher); len(errors) > 0 {
+		utils.WriteError(w, 400, "Validation Failed", errors)
+		return
+	}
+
+	// --- 3. THE SECURITY STEP ---
+	// Hash the password before it ever touches the database layer
+	hashedPwd, err := utils.HashPassword(newTeacher.Password)
+	if err != nil {
+		log.Println(err)
+		utils.WriteError(w, 500, "Server error processing credentials")
+		return
+	}
+	// Swap the plain text for the hash
+	newTeacher.PasswordHash = hashedPwd
+	newTeacher.Password = ""
+	ctx := r.Context()
+
+	teacherToDB := []models.Teacher{
+		newTeacher,
+	}
+
+	added, err := h.Repo.CreateBulk(ctx, teacherToDB)
+	if err != nil {
+		log.Println(err)
+		utils.ResponseError(w, err, "")
+		return
+	}
+
+	response := struct {
+		Data models.Teacher `json:"data"`
+	}{
+		Data: added[0],
+	}
+	utils.WriteJSON(w, 201, "Registration successful", response)
+}
+
+func (h *TeacherHandler) LoginTeacher(w http.ResponseWriter, r *http.Request) {
+	var req models.Teacher
+	// Data Validation
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		utils.WriteError(w, 400, "Invalid request body")
+		return
+	}
+	defer r.Body.Close()
+
+	// if errors := models.ValidateOne(req); len(errors) > 0 {
+	// 	utils.WriteError(w, 400, "Validation Failed", errors)
+	// 	return
+	// }
+
+	var teacher models.Teacher
+	// Search for user if user actually exists
+	query := "SELECT id, first_name, last_name, password_hash, is_active, role FROM teachers WHERE email = ?"
+	err := h.Repo.DB.QueryRow(query, req.Email).Scan(&teacher.ID, &teacher.FirstName, &teacher.LastName, &teacher.PasswordHash, &teacher.IsActive, &teacher.Role)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Println(err)
+			utils.WriteError(w, 401, "Invalid email or password")
+			return
+		}
+		log.Println(err)
+		utils.WriteError(w, 500, "server error")
+		return
+	}
+
+	// is user active
+	if !teacher.IsActive {
+		utils.WriteError(w, 403, "Account is deactived. Please contact support")
+		return
+	}
+	// verify password
+	newHash, didUpgrade, err := utils.UpgradeHashIfNeeded(req.Password, teacher.PasswordHash)
+	if err != nil {
+		log.Println(err)
+		utils.WriteError(w, 401, "Invalid email or password")
+		return
+	}
+	//  If security parameters were updated, save the new hash to DB
+	if didUpgrade {
+		_, _ = h.Repo.DB.Exec("UPDATE teachers SET password_hash = ? WHERE id = ?", newHash, teacher.ID)
+		// We don't block login if the upgrade-save fails, but in production, log this.
+	}
+	// Generate Token
+	token, err := utils.GenerateJWT(strconv.Itoa(teacher.ID), teacher.Role)
+	if err != nil {
+		utils.WriteError(w, 500, "Failed to create session")
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		HttpOnly: true,                 // Prevents JavaScript (XSS) access
+		Secure:   true,                 // Only sent over HTTPS
+		SameSite: http.SameSiteLaxMode, // Prevents CSRF
+		Path:     "/",
+		Expires:  time.Now().Add(24 * time.Hour),
+	})
+
+	// Send token as a response or as a cookie-
+	// Define and initialize the anonymous struct in one go
+	response := struct {
+		Token string `json:"token"`
+		User  struct {
+			ID        int    `json:"id"`
+			FirstName string `json:"first_name"`
+			LastName  string `json:"last_name"`
+			Role      string `json:"role"`
+		} `json:"user"`
+	}{
+		Token: token,
+		User: struct {
+			ID        int    `json:"id"`
+			FirstName string `json:"first_name"`
+			LastName  string `json:"last_name"`
+			Role      string `json:"role"`
+		}{
+			ID:        teacher.ID,
+			FirstName: teacher.FirstName,
+			LastName:  teacher.LastName,
+			Role:      teacher.Role,
+		},
+	}
+
+	utils.WriteJSON(w, 200, "Login successfully", response)
+}
+
+func (h *TeacherHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	// 1. Create a cookie with the exact same Name and Path
+	// 2. Set the Value to empty
+	// 3. Set the Expiry to the past (Unix epoch time 0)
+	// 4. Set MaxAge to -1 (Force deletion)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	utils.WriteJSON(w, 200, "Logged out successfully", nil)
+}
 
 func (h *TeacherHandler) GetTeachers(w http.ResponseWriter, r *http.Request) {
 	filter := models.TeacherFilter{

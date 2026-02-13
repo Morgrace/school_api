@@ -77,7 +77,7 @@ func (r *TeacherRepository) CreateBulk(ctx context.Context, teachers []models.Te
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.PrepareContext(ctx, "INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES(?,?,?,?,?)")
+	stmt, err := tx.PrepareContext(ctx, "INSERT INTO teachers (first_name, last_name, email, class, subject,password_hash) VALUES(?,?,?,?,?,?)")
 	if err != nil {
 		return nil, fmt.Errorf("repo: failed to prepare statement: %w", err)
 	}
@@ -85,7 +85,7 @@ func (r *TeacherRepository) CreateBulk(ctx context.Context, teachers []models.Te
 
 	result := make([]models.Teacher, len(teachers))
 	for i, t := range teachers {
-		res, err := stmt.ExecContext(ctx, t.FirstName, t.LastName, t.Email, t.Class, t.Subject)
+		res, err := stmt.ExecContext(ctx, t.FirstName, t.LastName, t.Email, t.Class, t.Subject, t.PasswordHash)
 		if err != nil {
 			// Pro Tip: Check for MySQL duplicate entry error (Error 1062)
 			if strings.Contains(err.Error(), "Duplicate entry") {

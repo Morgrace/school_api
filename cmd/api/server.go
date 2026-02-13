@@ -36,9 +36,10 @@ func main() {
 	teacherHandler := handlers.NewTeacherHandler(teacherRepo)
 	studentHandler := handlers.NewStudentHandler(studentRepo)
 
+	authMiddleware := mw.NewAuthMiddleware(teacherRepo)
 	// Level 3: Create the Router (injects Handler)
 	// Note: We need to update your router.Router() function to accept this argument!
-	mux := router.Router(teacherHandler, studentHandler)
+	mux := router.Router(teacherHandler, studentHandler,authMiddleware)
 
 	port := os.Getenv("SERVER_PORT")
 

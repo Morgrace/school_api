@@ -2,37 +2,24 @@ package router
 
 import (
 	"net/http"
-	// Make sure this matches your folder structure.
-	// If handlers are in "simpleapi/internal/handlers", use that.
 	"simpleapi/internal/api/handlers"
+	"simpleapi/internal/api/middlewares"
 )
 
-func Router(th *handlers.TeacherHandler, sh *handlers.StudentHandler) *http.ServeMux {
-
-	// 1. Create the Sub-Router for V1
-	// This router thinks it is at the root ("/")
-	v1 := http.NewServeMux()
-
-	// --- TEACHER ROUTES ---
-	v1.HandleFunc("GET /teachers", th.GetTeachers)
-	v1.HandleFunc("POST /teachers", th.CreateTeachers)
-	v1.HandleFunc("PATCH /teachers", th.BulkPatchTeachers)
-	v1.HandleFunc("DELETE /teachers", th.BulkDeleteTeachers)
-	v1.HandleFunc("GET /teachers/{id}", th.GetTeacherByID)
-	v1.HandleFunc("PUT /teachers/{id}", th.UpdateTeacherFull)
-	v1.HandleFunc("PATCH /teachers/{id}", th.PatchTeacher)
-	v1.HandleFunc("DELETE /teachers/{id}", th.DeleteTeacher)
-
-	// --- SUB ROUTES ---
-	v1.HandleFunc("GET /teachers/{id}/students", th.GetStudentsByTeacherId)
-	v1.HandleFunc("GET /teachers/{id}/studentCount", th.GetStudentsByTeacherId)
-
-	// ---- STUDENT ROUTES ---
-	v1.HandleFunc("GET /students", sh.GetStudents)
-	v1.HandleFunc("POST /students", sh.CreateStudents)
-
+func Router(th *handlers.TeacherHandler, sh *handlers.StudentHandler, am *middlewares.AuthMiddleware) *http.ServeMux {
+	// 1. Create the Main Traffic Controller
 	mainMux := http.NewServeMux()
 
+	// 2. Create the V1 Sub-Router (The Shared Canvas)
+	v1 := http.NewServeMux()
+
+	// 3. Hand the V1 canvas to your sub-routers to paint their routes
+	authenticationRoutes(v1, th)
+	registerTeachersRoutes(v1, th,am)
+	registerStudentRoutes(v1, sh)
+
+	// 4. Mount the filled-up V1 router onto the main router
+	// Any request starting with "/api/v1/" gets stripped and sent to 'v1'
 	mainMux.Handle("/api/v1/", http.StripPrefix("/api/v1", v1))
 	return mainMux
 }
